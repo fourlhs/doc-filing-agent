@@ -1,0 +1,49 @@
+# doc-filing-agent
+
+AI agent that reads printed Greek business documents, classifies them (company,
+doc type, date), and proposes where to file them — deferring to a human reviewer
+when it is not confident.
+
+## Architecture principle: decouple the brain from the world
+
+The reasoning core (`agent/`) must never know where documents come from or where
+they go. It takes **text in** and returns a **structured `Decision` out**. Nothing
+else. This means the input source can be swapped from a local folder to cloud
+storage by replacing `ingestion/` only — no other module changes.
+
+### Import rules (enforce these in review)
+
+| Module       | May import from            | Must NEVER import from                  |
+|--------------|----------------------------|-----------------------------------------|
+| `ingestion/` | stdlib, extraction libs    | `agent/`, `routing/`, `review/`, `eval/`|
+| `agent/`     | stdlib, pydantic, LLM SDK  | `ingestion/`, `routing/`, `review/`, `eval/` — and no file/network I/O except the LLM call |
+| `routing/`   | `agent.schema` only        | `ingestion/` — and no filesystem access |
+| `eval/`      | `agent.schema`             | `ingestion/`                            |
+| `review/`    | `agent.schema`, `routing`  | `ingestion/`                            |
+
+- `agent/schema.py` is the **shared contract**: every module downstream of the
+  agent depends on the `Decision` model, never on agent internals.
+- `routing/` computes *where a doc should go* (auto vs review) as a pure
+  function of the `Decision`. It does not move files.
+- `main.py` is the **composition root** — the only place where the world
+  (reading files, moving files, writing reports) meets the brain.
+
+## Pipeline
+
+```
+input/  →  ingestion (extract text)  →  agent (classify → Decision)
+        →  routing (auto | review + reason)  →  main.py moves file
+        →  review (human-readable CSV)       →  eval (vs ground truth)
+```
+
+## Module responsibilities
+
+Each module folder has its own `CLAUDE.md` with its single responsibility.
+One module = one responsibility; if a change touches two modules' concerns,
+stop and reconsider the boundary.
+
+## Status
+
+Implemented so far: `agent/schema.py` and `agent/parsing.py` (never-crash
+repair layer for LLM output) plus their tests. Everything else is stubs with
+docstrings; build order and open TODOs live in `docs/ROADMAP.md`.

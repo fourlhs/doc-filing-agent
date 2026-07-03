@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+
+# Secrets
+.env
+
+# Documents and generated reports flow through these; keep the folders only
+input/*
+!input/.gitkeep
+output/*
+!output/auto/
+!output/review/
+output/auto/*
+output/review/*
+!output/auto/.gitkeep
+!output/review/.gitkeep
+
+# OS
+Thumbs.db
+.DS_Store
