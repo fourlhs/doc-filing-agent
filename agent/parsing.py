@@ -96,6 +96,17 @@ def parse_decision(raw: str | dict[str, Any]) -> Decision:
     )
 
 
+def fallback_decision(note: str) -> Decision:
+    """Full-fallback Decision (UNKNOWN / OTHER / no date, all confidences 0)
+    whose parse_errors carries only ``note``.
+
+    For failures where there is nothing to parse at all: empty document
+    content, a response without a tool call, or pipeline errors caught in
+    main.py. Confidence 0 guarantees human review.
+    """
+    return parse_decision({}).model_copy(update={"parse_errors": [note]})
+
+
 def _coerce_payload(raw: str | dict[str, Any], errors: list[str]) -> dict[str, Any]:
     """Get a dict out of the raw response, or {} (-> full fallback)."""
     if isinstance(raw, dict):

@@ -21,6 +21,9 @@ via one LLM call. This is the ONLY module that reasons.
   always receives a valid `Decision`; a parse failure surfaces as a
   review-routed document, never an exception. Repair lives here — not in
   the schema, not downstream — because this module owns the LLM boundary.
+- **The never-crash rule covers model OUTPUT only.** Transport errors (auth,
+  rate limit, network) are allowed to raise out of `classify` — main.py's
+  per-document isolation owns those. Don't catch them here.
 - `Decision.proposed_filename` / `proposed_folder` are format-checked only;
   their content is UNTRUSTED for filesystem use. Path sanitization
   (traversal, Windows-invalid characters) is main.py's job at the filing

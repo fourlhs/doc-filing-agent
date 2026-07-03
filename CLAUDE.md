@@ -48,6 +48,5 @@ stop and reconsider the boundary.
 
 ## Status
 
-Implemented so far: `agent/schema.py` and `agent/parsing.py` (never-crash
-repair layer for LLM output) plus their tests. Everything else is stubs with
-docstrings; build order and open TODOs live in `docs/ROADMAP.md`.
+Being built module-by-module; `docs/ROADMAP.md` is the single source of truth
+for what is implemented (checked boxes) and what is still a stub.

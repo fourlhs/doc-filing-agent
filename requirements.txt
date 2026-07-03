@@ -2,8 +2,7 @@
 pydantic>=2.7,<3
 
 # LLM SDK for the reasoning core (agent/)
-# TODO: pin exact version when the LLM call is implemented
-anthropic
+anthropic>=0.116,<1
 
 # Text extraction (ingestion/) — v1: PDF text layer
 pypdf>=6,<7

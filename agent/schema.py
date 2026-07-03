@@ -80,12 +80,12 @@ class Decision(BaseModel):
         description="One sentence, in Greek, saying what the document is."
     )
     proposed_filename: str = Field(
-        description="Derived from company/doc_type/date, e.g. "
-        "'2024-03-15_helector_invoice.pdf'."
+        description="Derived from company/doc_type/date, lowercase, no "
+        "extension, e.g. '2024-03-15_helector_invoice'."
     )
     proposed_folder: str = Field(
-        description="Filing path derived from the fields, e.g. "
-        "'Helector/invoices/2024/'."
+        description="Filing path '<Company>/<doc_type>/', e.g. "
+        "'Helector/invoice/'."
     )
     confidence: FieldConfidence
     rationale: str = Field(
