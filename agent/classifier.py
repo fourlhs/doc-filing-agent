@@ -1,14 +1,15 @@
-"""Classify a document's text into a structured Decision via one LLM call.
+"""Classify a document's content into a structured Decision via one LLM call.
 
-Pure with respect to the world: the only input is the text string, the only
-output is a Decision. No filesystem access, no paths, no folder names.
+Pure with respect to the world: the only input is a DocumentContent (text
+and/or page images), the only output is a Decision. No filesystem access,
+no paths, no folder names.
 """
 
-from agent.schema import Decision
+from agent.schema import Decision, DocumentContent
 
 
-def classify(text: str) -> Decision:
-    """Return the agent's structured Decision for one document's text.
+def classify(content: DocumentContent) -> Decision:
+    """Return the agent's structured Decision for one document's content.
 
     Never raises on malformed model output: the raw response must flow
     through ``parsing.parse_decision``, which repairs each invalid field to

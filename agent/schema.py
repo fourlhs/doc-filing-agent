@@ -1,14 +1,32 @@
-"""The Decision schema — the shared contract of the entire pipeline.
+"""The shared contract of the entire pipeline: what the agent consumes
+(DocumentContent) and what it returns (Decision).
 
-The agent must return exactly this structure for every document. routing/,
-eval/, and review/ all depend on this module and nothing else in agent/.
-Change it deliberately: every downstream module feels it.
+Every other module depends on this file and nothing else in agent/. It must
+stay pydantic/stdlib-only — importing the contract must never drag in the
+LLM SDK. Change it deliberately: the whole pipeline feels it.
 """
 
 import datetime as dt
 from enum import Enum
 
 from pydantic import BaseModel, Field
+
+
+class DocumentContent(BaseModel):
+    """What ingestion hands the agent for one document.
+
+    text-only in v1 (PDF text layer). ``pages`` (rendered page images, PNG
+    bytes) exists so an OCR/vision extractor can be added later without
+    changing the agent's signature.
+    """
+
+    text: str | None = None
+    pages: list[bytes] = Field(default_factory=list)
+
+    @property
+    def is_empty(self) -> bool:
+        """True when there is nothing usable to classify."""
+        return not (self.text and self.text.strip()) and not self.pages
 
 
 class Company(str, Enum):

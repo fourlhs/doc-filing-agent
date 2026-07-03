@@ -11,8 +11,8 @@ uncertain is flagged for human review.
 input/                     local drop folder for scanned/printed Greek docs
   │
   ▼
-ingestion/                 read file, extract text          (world: I/O)
-  │        RawDocument(doc_id, source_name, text)
+ingestion/                 read file, extract content       (world: I/O)
+  │        RawDocument(doc_id, source_name, content)
   ▼
 agent/                     LLM classification               (brain: pure)
   │        Decision(company, doc_type, date, summary,
@@ -49,8 +49,8 @@ python main.py                # TODO: not implemented yet — skeleton only
 ## Layout
 
 ```
-ingestion/    read a document from input/, extract its text
-agent/        the reasoning core: text → Decision (only module that reasons)
+ingestion/    read a document from input/, extract its content
+agent/        the reasoning core: content → Decision (only module that reasons)
 routing/      Decision → auto/ or review/, with reason
 eval/         per-field accuracy + confidence calibration vs ground truth
 review/       human-readable CSV report of every doc

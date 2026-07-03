@@ -1,14 +1,16 @@
 # agent/
 
-**Single responsibility:** the reasoning core. Takes extracted text, returns a
-structured `Decision` via one LLM call. This is the ONLY module that reasons.
+**Single responsibility:** the reasoning core. Takes extracted content
+(`DocumentContent`: text and/or page images), returns a structured `Decision`
+via one LLM call. This is the ONLY module that reasons.
 
-- Pure with respect to the world: text in -> `Decision` out. No file reads, no
-  file writes, no knowledge of where documents live. Its only external contact
-  is the LLM API.
-- `schema.py` is the shared contract of the whole pipeline: `routing/`,
-  `eval/`, and `review/` import `Decision` from here and nothing else from
-  this module.
+- Pure with respect to the world: content in -> `Decision` out. No file reads,
+  no file writes, no knowledge of where documents live. Its only external
+  contact is the LLM API.
+- `schema.py` is the shared contract of the whole pipeline: every other module
+  imports its types from there and nothing else from this module. It must stay
+  pydantic/stdlib-only (same for `__init__.py`) so importing the contract
+  never drags in the LLM SDK.
 - Never imports from `ingestion/`, `routing/`, `review/`, or `eval/`.
 - Confidence scores must be per-field (company, doc_type, date) so routing
   can flag a doc when any single field is shaky.

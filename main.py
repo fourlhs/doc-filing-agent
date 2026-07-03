@@ -1,8 +1,8 @@
 """Composition root: the ONLY place where the world (I/O) meets the brain (agent).
 
 Wires the pipeline together:
-    1. ingestion  — read docs from input/, extract text
-    2. agent      — classify text -> Decision
+    1. ingestion  — read docs from input/, extract content
+    2. agent      — classify content -> Decision
     3. routing    — Decision -> auto | review, with reason
     4. (here)     — move the original file to output/<destination>/
     5. review     — write the human-readable CSV report
@@ -24,7 +24,7 @@ def run_pipeline(input_dir: Path = INPUT_DIR) -> None:
 
     TODO: implement after design review. Sketch:
         for raw_doc in ingestion.reader.iter_documents(input_dir):
-            decision = agent.classifier.classify(raw_doc.text)
+            decision = agent.classifier.classify(raw_doc.content)
             result = routing.router.route(decision)
             # move raw_doc's file to output/<result.destination>/<proposed_filename>
         review.report.write_review_csv(..., REVIEW_CSV)
