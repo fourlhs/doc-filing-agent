@@ -1,19 +1,17 @@
 """Route each Decision to auto-filing or human review, with a reason.
 
 Pure: reads the Decision's per-field confidences, returns a destination.
-Never touches the filesystem — main.py performs the actual move.
+Never touches the filesystem — main.py performs the actual copy.
 """
 
 from dataclasses import dataclass
 from enum import Enum
 
-from agent.schema import Decision
+from agent.schema import Company, Decision
 
-# TODO: set after eval/ shows where confidence separates right from wrong.
-# None = deliberately unset; route() must refuse to run until these are chosen.
-COMPANY_THRESHOLD: float | None = None
-DOC_TYPE_THRESHOLD: float | None = None
-DATE_THRESHOLD: float | None = None
+# TODO(step 9): provisional values — recalibrate from eval/ once ~30-50
+# hand-labeled documents exist (docs/ROADMAP.md).
+THRESHOLDS = {"company": 0.80, "doc_type": 0.80, "date": 0.80}
 
 
 class Destination(str, Enum):
@@ -34,13 +32,19 @@ class RoutingResult:
 def route(decision: Decision) -> RoutingResult:
     """Apply the routing rules to one Decision.
 
-    Rules (fixed by design, thresholds TBD):
-        - company == UNKNOWN                          -> REVIEW
-        - any field confidence below its threshold    -> REVIEW
-        - otherwise                                   -> AUTO
-    The reason string must name the triggering field(s) and value(s),
-    e.g. "date confidence 0.42 below threshold 0.80".
-
-    TODO: implement after design review and after thresholds are set.
+    REVIEW if company is UNKNOWN (regardless of confidence) or any field's
+    confidence is strictly below its threshold (equality passes); AUTO
+    otherwise. The reason names every trigger with its numbers.
     """
-    raise NotImplementedError("Skeleton only — pending design review")
+    triggers = []
+    if decision.company == Company.UNKNOWN:
+        triggers.append("company is UNKNOWN")
+    for field, threshold in THRESHOLDS.items():
+        score = getattr(decision.confidence, field)
+        if score < threshold:
+            triggers.append(
+                f"{field} confidence {score:.2f} below threshold {threshold:.2f}"
+            )
+    if triggers:
+        return RoutingResult(Destination.REVIEW, "; ".join(triggers))
+    return RoutingResult(Destination.AUTO, "all confidences at or above thresholds")

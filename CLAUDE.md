@@ -28,7 +28,7 @@ text layer to OCR/vision — by replacing `ingestion/` only; no other module cha
   and `agent/__init__.py` must stay pydantic/stdlib-only — importing the
   contract must never drag in the LLM SDK.
 - `routing/` computes *where a doc should go* (auto vs review) as a pure
-  function of the `Decision`. It does not move files.
+  function of the `Decision`. It never touches files.
 - `main.py` is the **composition root** — the only place where the world
   (reading files, moving files, writing reports) meets the brain.
 
@@ -36,7 +36,7 @@ text layer to OCR/vision — by replacing `ingestion/` only; no other module cha
 
 ```
 input/  →  ingestion (extract content)  →  agent (classify → Decision)
-        →  routing (auto | review + reason)  →  main.py moves file
+        →  routing (auto | review + reason)  →  main.py copies file
         →  review (human-readable CSV)       →  eval (vs ground truth)
 ```
 
