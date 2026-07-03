@@ -11,3 +11,6 @@ flag with the reason.
   re-deciding anything.
 - Imports `agent.schema` and `routing.router` (for the result types) only.
   Never imports `ingestion/`.
+- Encoding is `utf-8-sig` (BOM) so Greek opens correctly in Excel on Windows.
+  Greek-locale Excel expects `;` as the list separator — if the report opens
+  as a single column, flip `DELIMITER` in `report.py`.

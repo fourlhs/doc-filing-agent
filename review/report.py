@@ -1,11 +1,18 @@
 """Write the human-readable CSV report of every processed document."""
 
+import csv
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
 from agent.schema import Decision
 from routing.router import RoutingResult
+
+# utf-8-sig: the BOM makes Excel on Windows detect UTF-8, so Greek renders.
+ENCODING = "utf-8-sig"
+# Greek-locale Excel expects ';' out of the box — flip this constant if the
+# report opens as one column (see CLAUDE.md).
+DELIMITER = ","
 
 # Column order chosen for a human scanning the file: identity first, the
 # proposal, then the numbers, then the flag that says whether to look closer.
@@ -39,10 +46,30 @@ class ReviewRow:
 
 
 def write_review_csv(rows: Iterable[ReviewRow], out_path: Path) -> None:
-    """Serialize all rows to ``out_path`` using REVIEW_CSV_COLUMNS.
+    """Serialize all rows to ``out_path`` (overwriting it) — one report per run."""
+    with out_path.open("w", encoding=ENCODING, newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=REVIEW_CSV_COLUMNS, delimiter=DELIMITER)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(_serialize(row))
 
-    TODO: implement after design review.
-        - utf-8-sig encoding so Greek text opens cleanly in Excel
-        - empty string for null dates
-    """
-    raise NotImplementedError("Skeleton only — pending design review")
+
+def _serialize(row: ReviewRow) -> dict[str, str]:
+    decision = row.decision
+    return {
+        "doc_id": row.doc_id,
+        "source_name": row.source_name,
+        "company": decision.company.value,
+        "doc_type": decision.doc_type.value,
+        "date": decision.date.isoformat() if decision.date else "",
+        "summary": decision.summary,
+        "proposed_filename": decision.proposed_filename,
+        "proposed_folder": decision.proposed_folder,
+        "confidence_company": f"{decision.confidence.company:.2f}",
+        "confidence_doc_type": f"{decision.confidence.doc_type:.2f}",
+        "confidence_date": f"{decision.confidence.date:.2f}",
+        "flag": row.routing.destination.value,
+        "reason": row.routing.reason,
+        "rationale": decision.rationale,
+        "parse_errors": "; ".join(decision.parse_errors),
+    }
