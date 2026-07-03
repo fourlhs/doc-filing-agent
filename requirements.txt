@@ -5,12 +5,9 @@ pydantic>=2.7,<3
 # TODO: pin exact version when the LLM call is implemented
 anthropic
 
-# --- Text extraction (ingestion/) — choose ONE path during implementation ---
-# TODO: decide based on what the scanned docs look like (see ingestion/CLAUDE.md)
-# pypdf                  # if PDFs carry a text layer
-# pdf2image              # if scanned images: PDF -> image ...
-# pytesseract            # ... -> OCR (Greek language pack: 'ell')
-# Pillow                 # image handling for the OCR path
+# Text extraction (ingestion/) — v1: PDF text layer
+pypdf>=6,<7
+cryptography>=3.1  # pypdf needs it for AES-encrypted PDFs (empty-password docs are common)
 
 # Dev
 pytest

@@ -23,10 +23,12 @@ def run_pipeline(input_dir: Path = INPUT_DIR) -> None:
     """Process every document in ``input_dir`` end to end.
 
     TODO: implement after design review. Sketch:
-        for raw_doc in ingestion.reader.iter_documents(input_dir):
+        docs, skipped = ingestion.reader.list_documents(input_dir)
+        for path in docs:  # per-doc try/except: one bad doc never kills the run
+            raw_doc = ingestion.reader.load_document(path)
             decision = agent.classifier.classify(raw_doc.content)
             result = routing.router.route(decision)
-            # move raw_doc's file to output/<result.destination>/<proposed_filename>
+            # copy path to output/<result.destination>/... (sanitized names)
         review.report.write_review_csv(..., REVIEW_CSV)
     """
     raise NotImplementedError("Skeleton only — pending design review")
