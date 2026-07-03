@@ -30,7 +30,7 @@ text layer to OCR/vision — by replacing `ingestion/` only; no other module cha
 - `routing/` computes *where a doc should go* (auto vs review) as a pure
   function of the `Decision`. It never touches files.
 - `main.py` is the **composition root** — the only place where the world
-  (reading files, moving files, writing reports) meets the brain.
+  (reading files, copying files, writing reports) meets the brain.
 
 ## Pipeline
 

@@ -1,38 +1,177 @@
-"""Composition root: the ONLY place where the world (I/O) meets the brain (agent).
+"""Composition root: the ONLY place where the world (I/O) meets the brain.
 
-Wires the pipeline together:
-    1. ingestion  — read docs from input/, extract content
-    2. agent      — classify content -> Decision
-    3. routing    — Decision -> auto | review, with reason
-    4. (here)     — move the original file to output/<destination>/
-    5. review     — write the human-readable CSV report
-    6. eval       — optional: score against data/ground_truth.csv
+Per document: ingestion loads content, the agent classifies it, routing picks
+auto or review, and this file copies the original into output/ — auto docs
+under their (sanitized) proposed folder and filename, review docs under their
+original name. Every document lands in the review CSV (humans) and
+decisions.jsonl (machines — eval/ consumes it). Copying, env loading, path
+sanitization, and error swallowing live here and nowhere else.
 
-File moves happen HERE, not in routing/ — routing only decides, it never
-touches the filesystem. This keeps every module below main.py swappable.
+Per-document isolation: any exception from ingestion or the LLM call becomes
+a fallback Decision (confidence 0 -> review); one bad document never kills
+the run. Filing paths proposed by the LLM are untrusted and are sanitized
+before touching the filesystem.
 """
 
+import argparse
+import json
+import re
+import shutil
+from itertools import count
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+from agent import classifier, parsing
+from agent.schema import Decision
+from ingestion import reader
+from review.report import ReviewRow, write_review_csv
+from routing.router import Destination, RoutingResult, route
+
 INPUT_DIR = Path("input")
-REVIEW_CSV = Path("output") / "review_report.csv"
-GROUND_TRUTH_CSV = Path("data") / "ground_truth.csv"
+OUTPUT_DIR = Path("output")
+
+# One path segment: \w covers Greek letters; everything else except dot,
+# dash, and space becomes _. Windows-reserved device names get a prefix.
+_UNSAFE = re.compile(r"[^\w. -]")
+_RESERVED = {"con", "prn", "aux", "nul"} | {
+    f"{d}{i}" for d in ("com", "lpt") for i in (*"0123456789", "¹", "²", "³")
+}
+# NTFS caps components at 255 chars; cap well below so a prompt-injected
+# length bomb can never make a sanitized path unwriteable.
+_MAX_COMPONENT = 120
 
 
-def run_pipeline(input_dir: Path = INPUT_DIR) -> None:
-    """Process every document in ``input_dir`` end to end.
+def sanitize_component(raw: str) -> str:
+    """Make one path segment filesystem-safe: no separators, no traversal
+    (leading/trailing dots stripped), no Windows-invalid characters or
+    reserved device names, bounded length."""
+    clean = _UNSAFE.sub("_", raw).strip(" .")[:_MAX_COMPONENT].rstrip(" .")
+    if clean.split(".")[0].lower() in _RESERVED:
+        clean = "_" + clean
+    return clean or "_"
 
-    TODO: implement after design review. Sketch:
-        docs, skipped = ingestion.reader.list_documents(input_dir)
-        for path in docs:  # per-doc try/except: one bad doc never kills the run
-            raw_doc = ingestion.reader.load_document(path)
-            decision = agent.classifier.classify(raw_doc.content)
-            result = routing.router.route(decision)
-            # copy path to output/<result.destination>/... (sanitized names)
-        review.report.write_review_csv(..., REVIEW_CSV)
-    """
-    raise NotImplementedError("Skeleton only — pending design review")
+
+def sanitize_folder(raw: str) -> Path:
+    """LLM-proposed folder -> safe relative Path. Split on both separator
+    styles; empty and dots-only segments (e.g. '..') vanish, so escaping the
+    output tree is impossible by construction."""
+    parts = [sanitize_component(p) for p in re.split(r"[\\/]+", raw) if p.strip(" .")]
+    return Path(*parts) if parts else Path("_")
+
+
+def target_filename(proposed: str, source: Path) -> str:
+    """Sanitized proposed filename carrying the source's extension exactly
+    once (the agent proposes extension-less names, but don't trust that)."""
+    name = sanitize_component(proposed)
+    if source.suffix:
+        while name.lower().endswith(source.suffix.lower()):
+            name = name[: -len(source.suffix)]
+    return (name or "_") + source.suffix.lower()
+
+
+def unique_path(path: Path) -> Path:
+    """First free variant of path: name.pdf, name_2.pdf, name_3.pdf, ..."""
+    if not path.exists():
+        return path
+    for i in count(2):
+        candidate = path.with_stem(f"{path.stem}_{i}")
+        if not candidate.exists():
+            return candidate
+
+
+def copy_to_destination(
+    source: Path, decision: Decision, result: RoutingResult, output_dir: Path
+) -> None:
+    """Copy (never move — originals stay in input/) to the routed location."""
+    if result.destination is Destination.AUTO:
+        folder = output_dir / "auto" / sanitize_folder(decision.proposed_folder)
+        name = target_filename(decision.proposed_filename, source)
+    else:
+        folder = output_dir / "review"
+        name = source.name
+    folder.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, unique_path(folder / name))
+
+
+def place_document(
+    source: Path, decision: Decision, result: RoutingResult, output_dir: Path
+) -> RoutingResult:
+    """Copy with per-document degradation: a failed auto-copy demotes the doc
+    to review; a failed review-copy is recorded in the returned reason (the
+    original is still safe in input/). Never raises for one document."""
+    try:
+        copy_to_destination(source, decision, result, output_dir)
+        return result
+    except OSError as exc:
+        demoted = RoutingResult(Destination.REVIEW, f"{result.reason}; copy failed: {exc}")
+        if result.destination is Destination.REVIEW:
+            return demoted  # the review copy itself failed; nothing left to try
+        try:
+            copy_to_destination(source, decision, demoted, output_dir)
+        except OSError:
+            pass
+        return demoted
+
+
+def run(
+    input_dir: Path = INPUT_DIR,
+    output_dir: Path = OUTPUT_DIR,
+    model: str = classifier.MODEL,
+) -> None:
+    """Process every PDF in input_dir end to end."""
+    if not input_dir.is_dir():
+        raise SystemExit(f"input directory not found: {input_dir}")
+    docs, skipped = reader.list_documents(input_dir)
+    for path in skipped:
+        print(f"skipped (not a PDF): {path.name}")
+
+    rows: list[ReviewRow] = []
+    output_dir.mkdir(parents=True, exist_ok=True)
+    with (output_dir / "decisions.jsonl").open("w", encoding="utf-8") as jsonl:
+        for path in docs:
+            try:
+                raw = reader.load_document(path)
+                decision = classifier.classify(raw.content, model=model)
+            except Exception as exc:  # per-doc isolation: one bad doc != dead run
+                decision = parsing.fallback_decision(f"pipeline error: {exc}")
+                print(f"{path.name}: pipeline error: {exc}")
+            result = place_document(path, decision, route(decision), output_dir)
+            rows.append(ReviewRow(path.name, path.name, decision, result))
+            jsonl.write(
+                json.dumps(
+                    {
+                        "doc_id": path.name,
+                        "decision": decision.model_dump(mode="json"),
+                        "destination": result.destination.value,
+                        "reason": result.reason,
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
+            print(f"{path.name} -> {result.destination.value} ({result.reason})")
+
+    review_csv = output_dir / "review_report.csv"
+    write_review_csv(rows, review_csv)
+    auto = sum(1 for r in rows if r.routing.destination is Destination.AUTO)
+    print(f"\n{len(rows)} processed: {auto} auto, {len(rows) - auto} review")
+    print(f"report: {review_csv}")
+
+
+def main(argv: list[str] | None = None) -> None:
+    load_dotenv()  # ANTHROPIC_API_KEY from .env, if present
+    parser = argparse.ArgumentParser(description="Classify and file Greek business documents.")
+    sub = parser.add_subparsers(dest="command")
+    run_parser = sub.add_parser("run", help="process input/ end to end (default)")
+    run_parser.add_argument("--model", default=classifier.MODEL, help="Claude model override")
+    sub.add_parser("eval", help="score decisions against ground truth")
+    args = parser.parse_args(argv)
+
+    if args.command == "eval":
+        raise SystemExit("eval is not implemented yet (docs/ROADMAP.md step 8)")
+    run(model=getattr(args, "model", classifier.MODEL))
 
 
 if __name__ == "__main__":
-    run_pipeline()
+    main()

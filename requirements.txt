@@ -4,6 +4,9 @@ pydantic>=2.7,<3
 # LLM SDK for the reasoning core (agent/)
 anthropic>=0.116,<1
 
+# Composition root (main.py): .env loading for ANTHROPIC_API_KEY
+python-dotenv>=1,<2
+
 # Text extraction (ingestion/) — v1: PDF text layer
 pypdf>=6,<7
 cryptography>=3.1  # pypdf needs it for AES-encrypted PDFs (empty-password docs are common)
