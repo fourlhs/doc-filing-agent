@@ -7,9 +7,13 @@ wrong ones?
 
 - Input: the agent's `Decision`s plus `data/ground_truth.csv` with columns
   `doc_id,company,doc_type,date` (values must match the schema enums verbatim;
-  date ISO 8601 or empty for none).
-- Output: an `EvalReport` — per-field accuracy and a per-field confidence
-  separation metric (exact metric is TODO: AUROC vs mean-confidence gap).
+  date ISO 8601 or empty for none). A decision of "no date" against an empty
+  date label counts as CORRECT — confidently saying a dateless document has
+  no date is the right answer.
+- Output: an `EvalReport` — per-field accuracy, per-field AUROC (rank-based,
+  no sklearn), and a threshold sweep (0.50–0.95) whose `score >= t` semantics
+  match routing exactly, with a recommended threshold per field (smallest t
+  reaching the target auto-accuracy).
 - The calibration result is what sets the thresholds in `routing/` — eval
   informs routing, it never imports it.
 - Imports `agent.schema` only. Never imports `ingestion/`.

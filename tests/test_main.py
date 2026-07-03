@@ -177,6 +177,21 @@ def test_cli_forwards_model_override(monkeypatch):
     assert called == {"model": "claude-haiku-4-5-20251001"}
 
 
-def test_cli_eval_is_a_clear_not_implemented_exit():
-    with pytest.raises(SystemExit, match="not implemented"):
-        main.main(["eval"])
+def test_cli_eval_prints_a_report(dirs, monkeypatch, capsys, tmp_path):
+    input_dir, output_dir = dirs
+    shutil.copy(FIXTURES / "greek_text.pdf", input_dir)
+    monkeypatch.setattr(classifier, "classify", fake_classify_returning(CONFIDENT))
+    main.run(input_dir, output_dir)
+
+    gt = tmp_path / "gt.csv"
+    gt.write_text(
+        "doc_id,company,doc_type,date\ngreek_text.pdf,Helector,invoice,2024-03-15\n",
+        encoding="utf-8",
+    )
+    main.main(
+        ["eval", "--ground-truth", str(gt), "--decisions", str(output_dir / "decisions.jsonl")]
+    )
+    out = capsys.readouterr().out
+    assert "scored 1 documents" in out
+    assert "company: accuracy 100.0%" in out
+    assert "recommended threshold" in out

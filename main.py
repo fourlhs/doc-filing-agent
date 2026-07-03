@@ -24,12 +24,14 @@ from dotenv import load_dotenv
 
 from agent import classifier, parsing
 from agent.schema import Decision
+from eval.evaluate import evaluate, format_report, load_decisions, load_ground_truth
 from ingestion import reader
 from review.report import ReviewRow, write_review_csv
 from routing.router import Destination, RoutingResult, route
 
 INPUT_DIR = Path("input")
 OUTPUT_DIR = Path("output")
+GROUND_TRUTH_CSV = Path("data") / "ground_truth.csv"
 
 # One path segment: \w covers Greek letters; everything else except dot,
 # dash, and space becomes _. Windows-reserved device names get a prefix.
@@ -165,12 +167,21 @@ def main(argv: list[str] | None = None) -> None:
     sub = parser.add_subparsers(dest="command")
     run_parser = sub.add_parser("run", help="process input/ end to end (default)")
     run_parser.add_argument("--model", default=classifier.MODEL, help="Claude model override")
-    sub.add_parser("eval", help="score decisions against ground truth")
+    eval_parser = sub.add_parser("eval", help="score decisions against ground truth")
+    eval_parser.add_argument("--ground-truth", type=Path, default=GROUND_TRUTH_CSV)
+    eval_parser.add_argument("--decisions", type=Path, default=OUTPUT_DIR / "decisions.jsonl")
     args = parser.parse_args(argv)
 
     if args.command == "eval":
-        raise SystemExit("eval is not implemented yet (docs/ROADMAP.md step 8)")
-    run(model=getattr(args, "model", classifier.MODEL))
+        try:
+            report = evaluate(load_decisions(args.decisions), load_ground_truth(args.ground_truth))
+        except FileNotFoundError as exc:
+            raise SystemExit(f"{exc} - run 'python main.py run' first and label docs in {GROUND_TRUTH_CSV}")
+        except ValueError as exc:
+            raise SystemExit(str(exc))
+        print(format_report(report))
+    else:
+        run(model=getattr(args, "model", classifier.MODEL))
 
 
 if __name__ == "__main__":
