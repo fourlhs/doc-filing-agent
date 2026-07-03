@@ -43,7 +43,15 @@ pip install -r requirements.txt
 ## Run
 
 ```
-python main.py                # TODO: not implemented yet — skeleton only
+# once: put your key in a .env file (gitignored)
+echo ANTHROPIC_API_KEY=sk-ant-... > .env
+
+# drop PDFs into input/, then:
+python main.py run            # classify, copy to output/, write the review CSV
+python main.py run --model claude-haiku-4-5-20251001   # model override
+
+# after hand-labeling data/ground_truth.csv (doc_id = filename):
+python main.py eval           # accuracy, AUROC, threshold recommendations
 ```
 
 ## Layout
