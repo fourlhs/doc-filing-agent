@@ -11,6 +11,7 @@ __pycache__/
 # Documents and generated reports flow through these; keep the folders only
 input/*
 !input/.gitkeep
+data/*.pdf
 output/*
 !output/auto/
 !output/review/
