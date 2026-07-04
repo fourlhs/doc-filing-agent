@@ -46,6 +46,7 @@ def test_roundtrip_preserves_greek_and_column_order(tmp_path):
     assert first["company"] == "Helector"
     assert first["date"] == "2024-03-15"
     assert first["confidence_company"] == "0.95"
+    assert first["agreement_company"] == ""  # single-sample run: no agreement
     assert first["flag"] == "auto"
     assert first["parse_errors"] == ""
 
@@ -55,6 +56,19 @@ def test_roundtrip_preserves_greek_and_column_order(tmp_path):
     assert "company is UNKNOWN" in second["reason"]
     assert "ΑΚΤΩΡ ΑΤΕ" in second["parse_errors"]
     assert "; " in second["parse_errors"]  # multiple entries joined
+
+
+def test_agreement_columns_written_when_present(tmp_path):
+    row = clean_row()
+    decision = row.decision.model_copy(
+        update={"agreement": FieldConfidence(company=0.8, doc_type=1.0, date=0.6)}
+    )
+    out = tmp_path / "report.csv"
+    write_review_csv([ReviewRow(row.doc_id, row.source_name, decision, row.routing)], out)
+    (read,) = read_back(out)
+    assert read["agreement_company"] == "0.80"
+    assert read["agreement_doc_type"] == "1.00"
+    assert read["agreement_date"] == "0.60"
 
 
 def test_bom_present_for_excel(tmp_path):

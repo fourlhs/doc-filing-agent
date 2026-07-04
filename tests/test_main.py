@@ -65,6 +65,7 @@ def test_end_to_end_files_copies_and_reports(dirs, monkeypatch, capsys):
     assert [r["doc_id"] for r in records] == ["greek_text.pdf", "no_text_layer.pdf"]
     assert records[0]["destination"] == "auto"
     assert records[1]["destination"] == "review"
+    assert records[0]["samples"] == 1
     Decision.model_validate(records[0]["decision"])  # jsonl round-trips the schema
 
     report = (output_dir / "review_report.csv").read_text(encoding="utf-8-sig")
@@ -130,6 +131,38 @@ def test_missing_input_dir_exits_cleanly(tmp_path):
         main.run(tmp_path / "nope", tmp_path / "out")
 
 
+def test_samples_below_one_exits_before_touching_outputs(dirs):
+    input_dir, output_dir = dirs
+    with pytest.raises(SystemExit, match="--samples must be >= 1"):
+        main.run(input_dir, output_dir, samples=0)
+    assert not output_dir.exists()  # previous run's records never clobbered
+
+
+def test_run_forwards_samples_and_jsonl_carries_agreement(dirs, monkeypatch):
+    input_dir, output_dir = dirs
+    shutil.copy(FIXTURES / "greek_text.pdf", input_dir)
+    seen = {}
+
+    def fake(content, samples=1, **kwargs):
+        seen["samples"] = samples
+        decision = parsing.parse_decision(CONFIDENT)
+        from agent.schema import FieldConfidence
+
+        return decision.model_copy(
+            update={"agreement": FieldConfidence(company=0.8, doc_type=1.0, date=0.6)}
+        )
+
+    monkeypatch.setattr(classifier, "classify", fake)
+    main.run(input_dir, output_dir, samples=5)
+
+    assert seen["samples"] == 5
+    (line,) = (output_dir / "decisions.jsonl").read_text(encoding="utf-8").splitlines()
+    record = json.loads(line)
+    assert record["samples"] == 5
+    restored = Decision.model_validate(record["decision"])
+    assert restored.agreement.company == 0.8  # agreement round-trips the jsonl
+
+
 @pytest.mark.parametrize(
     ("raw", "expected"),
     [
@@ -167,14 +200,14 @@ def test_cli_no_args_defaults_to_run(monkeypatch):
     called = {}
     monkeypatch.setattr(main, "run", lambda **kw: called.update(kw))
     main.main([])
-    assert called == {"model": classifier.MODEL}
+    assert called == {"model": classifier.MODEL, "samples": 1}
 
 
-def test_cli_forwards_model_override(monkeypatch):
+def test_cli_forwards_model_and_samples(monkeypatch):
     called = {}
     monkeypatch.setattr(main, "run", lambda **kw: called.update(kw))
-    main.main(["run", "--model", "claude-haiku-4-5-20251001"])
-    assert called == {"model": "claude-haiku-4-5-20251001"}
+    main.main(["run", "--model", "claude-haiku-4-5-20251001", "--samples", "5"])
+    assert called == {"model": "claude-haiku-4-5-20251001", "samples": 5}
 
 
 def test_cli_eval_prints_a_report(dirs, monkeypatch, capsys, tmp_path):

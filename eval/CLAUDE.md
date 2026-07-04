@@ -2,8 +2,9 @@
 
 **Single responsibility:** measure the agent against hand-labeled ground truth.
 Two questions: (1) per-field accuracy — how often are company / doc_type / date
-right? (2) calibration — does confidence actually separate right answers from
-wrong ones?
+right? (2) calibration — how well does each uncertainty signal (self-reported
+confidence, and sampling agreement when decisions carry it) separate right
+answers from wrong ones?
 
 - Input: the agent's `Decision`s plus `data/ground_truth.csv` with columns
   `doc_id,true_company,true_doc_type,true_date` (+ optional `difficulty`,
@@ -15,7 +16,9 @@ wrong ones?
 - Output: an `EvalReport` — per-field accuracy, per-field AUROC (rank-based,
   no sklearn), and a threshold sweep (0.50–0.95) whose `score >= t` semantics
   match routing exactly, with a recommended threshold per field (smallest t
-  reaching the target auto-accuracy).
+  reaching the target auto-accuracy). Computed once per signal: always for
+  self-reported confidence (`fields`), and additionally for sampling
+  agreement (`agreement_fields`) over the scored docs that carry it.
 - The calibration result is what sets the thresholds in `routing/` — eval
   informs routing, it never imports it.
 - Imports `agent.schema` only. Never imports `ingestion/`.

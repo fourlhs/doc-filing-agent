@@ -1,8 +1,9 @@
 # review/
 
 **Single responsibility:** write the human-readable CSV report — every
-document, its proposed decision, per-field confidences, and its auto/review
-flag with the reason.
+document, its proposed decision, per-field confidences (plus per-field
+sampling agreement on multi-sample runs), and its auto/review flag with
+the reason.
 
 - One row per document, ALL documents (not just flagged ones): the reviewer
   needs to spot-check auto-filed docs too.

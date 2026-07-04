@@ -59,9 +59,11 @@ class FieldEval:
 @dataclass(frozen=True)
 class EvalReport:
     n_scored: int
+    n_with_agreement: int  # scored docs that carry a sampling-agreement signal
     missing_decisions: list[str]  # labeled but absent from decisions.jsonl
     missing_labels: list[str]  # decided but absent from ground truth
-    fields: dict[str, FieldEval]
+    fields: dict[str, FieldEval]  # scored on self-reported confidence
+    agreement_fields: dict[str, FieldEval] | None  # scored on sampling agreement
 
 
 def load_ground_truth(csv_path: Path) -> dict[str, GroundTruthRow]:
@@ -137,17 +139,37 @@ def evaluate(
     if not scored_stems:
         raise ValueError("no overlapping doc_ids between decisions and ground truth")
 
+    pairs = [(decisions_by_stem[s][1], truth_by_stem[s][1]) for s in scored_stems]
+    with_agreement = [(d, t) for d, t in pairs if d.agreement is not None]
+    return EvalReport(
+        n_scored=len(scored_stems),
+        n_with_agreement=len(with_agreement),
+        missing_decisions=sorted(
+            doc_id for stem, (doc_id, _) in truth_by_stem.items() if stem not in decisions_by_stem
+        ),
+        missing_labels=sorted(
+            doc_id for stem, (doc_id, _) in decisions_by_stem.items() if stem not in truth_by_stem
+        ),
+        fields=_field_evals(pairs, lambda d: d.confidence),
+        agreement_fields=(
+            _field_evals(with_agreement, lambda d: d.agreement) if with_agreement else None
+        ),
+    )
+
+
+def _field_evals(pairs: list, scores_of) -> dict[str, FieldEval]:
+    """Score every field over (decision, truth) pairs, reading the per-field
+    score from ``scores_of(decision)`` — self-reported confidence or sampling
+    agreement; correctness is identical for both."""
     fields = {}
     for field in SCORED_FIELDS:
         # For date, None == None counts CORRECT: a confident "no date" about
         # a genuinely dateless document is the right answer, not a miss.
         outcomes: list[Outcome] = []
         difficulty_counts: dict[str, list[int]] = {}
-        for stem in scored_stems:
-            decision = decisions_by_stem[stem][1]
-            truth = truth_by_stem[stem][1]
+        for decision, truth in pairs:
             ok = getattr(decision, field) == getattr(truth, field)
-            outcomes.append((getattr(decision.confidence, field), ok))
+            outcomes.append((getattr(scores_of(decision), field), ok))
             if truth.difficulty:
                 correct_total = difficulty_counts.setdefault(truth.difficulty, [0, 0])
                 correct_total[0] += ok
@@ -164,16 +186,7 @@ def evaluate(
                 else None
             ),
         )
-    return EvalReport(
-        n_scored=len(scored_stems),
-        missing_decisions=sorted(
-            doc_id for stem, (doc_id, _) in truth_by_stem.items() if stem not in decisions_by_stem
-        ),
-        missing_labels=sorted(
-            doc_id for stem, (doc_id, _) in decisions_by_stem.items() if stem not in truth_by_stem
-        ),
-        fields=fields,
-    )
+    return fields
 
 
 def _by_join_key(mapping: dict, source: str) -> dict:
@@ -231,7 +244,25 @@ def _recommend(sweep: list[SweepPoint]) -> float | None:
 
 def format_report(report: EvalReport) -> str:
     lines = [f"scored {report.n_scored} documents (target auto-accuracy {TARGET_AUTO_ACCURACY:.0%})"]
-    for field, fe in report.fields.items():
+    lines.append("\n=== signal: self-reported confidence ===")
+    lines += _signal_block(report.fields, report.n_scored)
+    if report.agreement_fields:
+        lines.append(
+            f"\n=== signal: sampling agreement (on {report.n_with_agreement} docs) ==="
+        )
+        lines += _signal_block(report.agreement_fields, report.n_with_agreement)
+    if report.missing_decisions:
+        lines.append(f"\nlabeled but not decided ({len(report.missing_decisions)}): "
+                     + ", ".join(report.missing_decisions[:5]))
+    if report.missing_labels:
+        lines.append(f"decided but not labeled ({len(report.missing_labels)}): "
+                     + ", ".join(report.missing_labels[:5]))
+    return "\n".join(lines)
+
+
+def _signal_block(fields: dict[str, FieldEval], n_total: int) -> list[str]:
+    lines = []
+    for field, fe in fields.items():
         auroc = f"{fe.auroc:.3f}" if fe.auroc is not None else "n/a (no mix of right/wrong)"
         difficulty = (
             " (" + ", ".join(f"{tag} {c}/{t} ({c / t:.0%})" for tag, (c, t) in fe.by_difficulty.items()) + ")"
@@ -241,7 +272,7 @@ def format_report(report: EvalReport) -> str:
         lines += [f"\n{field}: accuracy {fe.accuracy:.1%}{difficulty}, AUROC {auroc}",
                   "  threshold  auto-filed  auto-accuracy"]
         for p in fe.sweep:
-            selected = f"{p.n_selected}/{report.n_scored} ({p.coverage:.0%})"
+            selected = f"{p.n_selected}/{n_total} ({p.coverage:.0%})"
             accuracy = f"{p.accuracy:.1%}" if p.accuracy is not None else "n/a"
             lines.append(f"  {p.threshold:>9.2f}  {selected:>10}  {accuracy:>13}")
         recommended = (
@@ -250,10 +281,4 @@ def format_report(report: EvalReport) -> str:
             else "none in grid reaches the target"
         )
         lines.append(f"  recommended threshold: {recommended}")
-    if report.missing_decisions:
-        lines.append(f"\nlabeled but not decided ({len(report.missing_decisions)}): "
-                     + ", ".join(report.missing_decisions[:5]))
-    if report.missing_labels:
-        lines.append(f"decided but not labeled ({len(report.missing_labels)}): "
-                     + ", ".join(report.missing_labels[:5]))
-    return "\n".join(lines)
+    return lines

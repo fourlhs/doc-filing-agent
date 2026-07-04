@@ -28,6 +28,9 @@ REVIEW_CSV_COLUMNS = [
     "confidence_company",
     "confidence_doc_type",
     "confidence_date",
+    "agreement_company",  # sampling agreement — empty on single-sample runs
+    "agreement_doc_type",
+    "agreement_date",
     "flag",  # auto | review
     "reason",
     "rationale",
@@ -68,6 +71,9 @@ def _serialize(row: ReviewRow) -> dict[str, str]:
         "confidence_company": f"{decision.confidence.company:.2f}",
         "confidence_doc_type": f"{decision.confidence.doc_type:.2f}",
         "confidence_date": f"{decision.confidence.date:.2f}",
+        "agreement_company": f"{decision.agreement.company:.2f}" if decision.agreement else "",
+        "agreement_doc_type": f"{decision.agreement.doc_type:.2f}" if decision.agreement else "",
+        "agreement_date": f"{decision.agreement.date:.2f}" if decision.agreement else "",
         "flag": row.routing.destination.value,
         "reason": row.routing.reason,
         "rationale": decision.rationale,

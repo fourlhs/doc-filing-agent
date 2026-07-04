@@ -98,3 +98,11 @@ class Decision(BaseModel):
         "Empty means the LLM output parsed cleanly. Populated only by "
         "agent.parsing — the LLM is not asked for this field.",
     )
+    agreement: FieldConfidence | None = Field(
+        default=None,
+        description="Sampling agreement: fraction of k samples that reproduce "
+        "this decision's value, per field — an empirical P(same answer again). "
+        "Populated only by the classifier on multi-sample runs (--samples k>1); "
+        "the LLM is not asked for this field. Measurement only: routing reads "
+        "confidence, not this.",
+    )

@@ -40,10 +40,12 @@ null date (the document truly has no date) deserves a HIGH date score.
 
 
 def _input_schema() -> dict:
-    """Decision's JSON schema minus parse_errors — that field belongs to the
-    parser, never to the model."""
+    """Decision's JSON schema minus the pipeline-owned fields: parse_errors
+    belongs to the parser, agreement to the multi-sample classifier — the
+    model is never asked for either."""
     schema = Decision.model_json_schema()
     del schema["properties"]["parse_errors"]
+    del schema["properties"]["agreement"]
     return schema
 
 

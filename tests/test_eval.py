@@ -13,11 +13,11 @@ from eval.evaluate import (
     format_report,
     load_ground_truth,
 )
-from agent.schema import Company, DocType
+from agent.schema import Company, DocType, FieldConfidence
 
 
-def decision(company="Helector", date="2024-03-15", conf_company=0.9):
-    return parse_decision(
+def decision(company="Helector", date="2024-03-15", conf_company=0.9, agreement=None):
+    parsed = parse_decision(
         {
             "company": company,
             "doc_type": "invoice",
@@ -29,6 +29,11 @@ def decision(company="Helector", date="2024-03-15", conf_company=0.9):
             "rationale": "χ",
         }
     )
+    if agreement is not None:
+        parsed = parsed.model_copy(
+            update={"agreement": FieldConfidence(company=agreement, doc_type=1.0, date=1.0)}
+        )
+    return parsed
 
 
 def truth(doc_id, company=Company.HELECTOR, date=dt.date(2024, 3, 15), difficulty=None):
@@ -142,6 +147,29 @@ def test_evaluate_accuracy_sweep_and_joins():
     assert date.accuracy == 1.0
     assert date.auroc is None
     assert date.recommended_threshold == 0.50
+
+    # no decision carries agreement -> no agreement block
+    assert report.n_with_agreement == 0
+    assert report.agreement_fields is None
+    assert "sampling agreement" not in format_report(report)
+
+
+def test_agreement_signal_scored_separately_from_confidence():
+    # Both docs equally self-confident (0.9), but the wrong one is unstable
+    # under sampling: confidence can't separate them, agreement can.
+    decisions = {
+        "a.pdf": decision(agreement=1.0),  # right, stable
+        "b.pdf": decision(company="Aktor AI", agreement=0.2),  # wrong, unstable
+    }
+    ground_truth = {doc: truth(doc) for doc in ("a", "b")}
+
+    report = evaluate(decisions, ground_truth)
+
+    assert report.n_with_agreement == 2
+    assert report.fields["company"].auroc == 0.5  # tie: 0.9 vs 0.9
+    assert report.agreement_fields["company"].auroc == 1.0  # 1.0 vs 0.2
+    rendered = format_report(report)
+    assert "=== signal: sampling agreement (on 2 docs) ===" in rendered
 
 
 def test_evaluate_requires_overlap():

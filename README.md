@@ -49,6 +49,7 @@ echo ANTHROPIC_API_KEY=sk-ant-... > .env
 # drop PDFs into input/, then:
 python main.py run            # classify, copy to output/, write the review CSV
 python main.py run --model claude-haiku-4-5-20251001   # model override
+python main.py run --samples 5   # also record per-field sampling agreement
 
 # after hand-labeling data/ground_truth.csv (doc_id = filename):
 python main.py eval           # accuracy, AUROC, threshold recommendations

@@ -2,7 +2,8 @@
 
 **Single responsibility:** the reasoning core. Takes extracted content
 (`DocumentContent`: text and/or page images), returns a structured `Decision`
-via one LLM call. This is the ONLY module that reasons.
+via one LLM call per sample (k identical calls on multi-sample runs). This is
+the ONLY module that reasons.
 
 - Pure with respect to the world: content in -> `Decision` out. No file reads,
   no file writes, no knowledge of where documents live. Its only external
@@ -14,6 +15,9 @@ via one LLM call. This is the ONLY module that reasons.
 - Never imports from `ingestion/`, `routing/`, `review/`, or `eval/`.
 - Confidence scores must be per-field (company, doc_type, date) so routing
   can flag a doc when any single field is shaky.
+- `Decision.agreement` (multi-sample runs only) is classifier-owned
+  measurement — the per-field fraction of k samples reproducing the filed
+  answer. Routing never reads it; eval benchmarks it against confidence.
 - **Never crashes on malformed LLM output.** Every raw response goes through
   `parsing.parse_decision`, which repairs each invalid field to a safe
   fallback (`UNKNOWN` / `OTHER` / null date) with that field's confidence

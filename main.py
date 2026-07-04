@@ -120,8 +120,11 @@ def run(
     input_dir: Path = INPUT_DIR,
     output_dir: Path = OUTPUT_DIR,
     model: str = classifier.MODEL,
+    samples: int = 1,
 ) -> None:
     """Process every PDF in input_dir end to end."""
+    if samples < 1:
+        raise SystemExit(f"--samples must be >= 1, got {samples}")
     if not input_dir.is_dir():
         raise SystemExit(f"input directory not found: {input_dir}")
     docs, skipped = reader.list_documents(input_dir)
@@ -129,12 +132,13 @@ def run(
         print(f"skipped (not a PDF): {path.name}")
 
     rows: list[ReviewRow] = []
+    classifier.TOKEN_USAGE.update(input=0, output=0)
     output_dir.mkdir(parents=True, exist_ok=True)
     with (output_dir / "decisions.jsonl").open("w", encoding="utf-8") as jsonl:
         for path in docs:
             try:
                 raw = reader.load_document(path)
-                decision = classifier.classify(raw.content, model=model)
+                decision = classifier.classify(raw.content, model=model, samples=samples)
             except Exception as exc:  # per-doc isolation: one bad doc != dead run
                 decision = parsing.fallback_decision(f"pipeline error: {exc}")
                 print(f"{path.name}: pipeline error: {exc}")
@@ -147,6 +151,7 @@ def run(
                         "decision": decision.model_dump(mode="json"),
                         "destination": result.destination.value,
                         "reason": result.reason,
+                        "samples": samples,
                     },
                     ensure_ascii=False,
                 )
@@ -158,6 +163,12 @@ def run(
     write_review_csv(rows, review_csv)
     auto = sum(1 for r in rows if r.routing.destination is Destination.AUTO)
     print(f"\n{len(rows)} processed: {auto} auto, {len(rows) - auto} review")
+    usage = classifier.TOKEN_USAGE
+    if rows and (usage["input"] or usage["output"]):
+        print(
+            f"tokens: {usage['input']} in / {usage['output']} out "
+            f"(avg {usage['input'] // len(rows)} in / {usage['output'] // len(rows)} out per doc)"
+        )
     print(f"report: {review_csv}")
 
 
@@ -167,6 +178,12 @@ def main(argv: list[str] | None = None) -> None:
     sub = parser.add_subparsers(dest="command")
     run_parser = sub.add_parser("run", help="process input/ end to end (default)")
     run_parser.add_argument("--model", default=classifier.MODEL, help="Claude model override")
+    run_parser.add_argument(
+        "--samples",
+        type=int,
+        default=1,
+        help="classifications per doc; >1 records per-field sampling agreement",
+    )
     eval_parser = sub.add_parser("eval", help="score decisions against ground truth")
     eval_parser.add_argument("--ground-truth", type=Path, default=GROUND_TRUTH_CSV)
     eval_parser.add_argument("--decisions", type=Path, default=OUTPUT_DIR / "decisions.jsonl")
@@ -181,7 +198,10 @@ def main(argv: list[str] | None = None) -> None:
             raise SystemExit(str(exc))
         print(format_report(report))
     else:
-        run(model=getattr(args, "model", classifier.MODEL))
+        run(
+            model=getattr(args, "model", classifier.MODEL),
+            samples=getattr(args, "samples", 1),
+        )
 
 
 if __name__ == "__main__":
