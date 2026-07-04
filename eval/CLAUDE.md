@@ -13,6 +13,8 @@ answers from wrong ones?
   so labels may omit the extension (dotted names like `v1.2.report` survive). A
   decision of "no date" against an empty date label counts as CORRECT —
   confidently saying a dateless document has no date is the right answer.
+  Convention: documents showing only month-year are labeled (and answered)
+  as the 1st of that month.
 - Output: an `EvalReport` — per-field accuracy, per-field AUROC (rank-based,
   no sklearn), and a threshold sweep (0.50–0.95) whose `score >= t` semantics
   match routing exactly, with a recommended threshold per field (smallest t

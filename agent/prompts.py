@@ -31,8 +31,12 @@ unlisted entity to a listed one is an error, not a low-confidence guess.
 Field rules:
 - doc_type: pick the closest category; "OTHER" if none fits.
 - date: the document's OWN date (issue or signature date), never today's \
-date. Greek formats convert to ISO 8601: «15 Μαρτίου 2024» and 15/03/2024 \
-(day first) are both 2024-03-15. Use null when the document shows no date.
+date. Greek formats convert to ISO 8601: «7 Απριλίου 2023» and 07/04/2023 \
+(day first) are both 2023-04-07. If the document shows only a month and \
+year («Νοέμβριος 2023»), use the first day of that month (2023-11-01) — \
+for such documents that IS the complete, correct answer, so score your date \
+confidence on the month and year being right. Use null when the document \
+shows no date at all.
 - summary: exactly one sentence, in Greek, saying what the document is.
 - proposed_filename: <date>_<company>_<doc_type>, lowercase, hyphens for \
 spaces, no extension — e.g. 2024-03-15_helector_invoice, or \

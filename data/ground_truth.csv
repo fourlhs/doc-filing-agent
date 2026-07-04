@@ -4,7 +4,7 @@ doc_02,Helector,invoice,2024-05-02,clean,clean: clear invoice fields + date
 doc_03,Aktor Concessions,court_filing,2024-01-22,clean,clean: clear court filing
 doc_04,Aktor AI,correspondence,2024-06-10,clean,clean: clear correspondence
 doc_05,Aktor Construction,permit,2023-11-08,clean,clean: clear permit
-doc_06,Helector,technical_report,2024-02-19,clean,clean: clear technical report; date is month-year
+doc_06,Helector,technical_report,2024-02-01,clean,clean: clear technical report; date is month-year -> GT = 1st of month by convention
 doc_07,Aktor Group,financial_statement,2024-04-30,clean,clean: financial statement; two dates (fiscal end + issue) — GT = issue date
 doc_08,Aktor Facility Management,hr_document,2024-07-01,clean,clean: HR employment contract
 doc_09,Aktor Real Estate,invoice,2024-03-28,clean,"clean: invoice, real estate entity"
