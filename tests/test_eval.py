@@ -10,6 +10,7 @@ from eval.evaluate import (
     GroundTruthRow,
     _auroc,
     evaluate,
+    format_report,
     load_ground_truth,
 )
 from agent.schema import Company, DocType
@@ -30,8 +31,8 @@ def decision(company="Helector", date="2024-03-15", conf_company=0.9):
     )
 
 
-def truth(doc_id, company=Company.HELECTOR, date=dt.date(2024, 3, 15)):
-    return GroundTruthRow(doc_id, company, DocType.INVOICE, date)
+def truth(doc_id, company=Company.HELECTOR, date=dt.date(2024, 3, 15), difficulty=None):
+    return GroundTruthRow(doc_id, company, DocType.INVOICE, date, difficulty)
 
 
 # --- load_ground_truth -------------------------------------------------------
@@ -39,7 +40,7 @@ def truth(doc_id, company=Company.HELECTOR, date=dt.date(2024, 3, 15)):
 
 def write_csv(tmp_path: Path, body: str) -> Path:
     path = tmp_path / "gt.csv"
-    path.write_text("doc_id,company,doc_type,date\n" + body, encoding="utf-8")
+    path.write_text("doc_id,true_company,true_doc_type,true_date\n" + body, encoding="utf-8")
     return path
 
 
@@ -48,8 +49,20 @@ def test_load_ground_truth_parses_labels_and_empty_date(tmp_path):
     rows = load_ground_truth(path)
     assert rows["a.pdf"].company == Company.HELECTOR
     assert rows["a.pdf"].date == dt.date(2024, 3, 15)
+    assert rows["a.pdf"].difficulty is None
     assert rows["b.pdf"].company == Company.AKTOR_AI
     assert rows["b.pdf"].date is None
+
+
+def test_load_ground_truth_reads_difficulty_and_ignores_extra_columns(tmp_path):
+    path = tmp_path / "gt.csv"
+    path.write_text(
+        "doc_id,true_company,true_doc_type,true_date,difficulty,note\n"
+        "doc_01,Helector,invoice,2024-03-15,hard,two dates on page\n",
+        encoding="utf-8",
+    )
+    rows = load_ground_truth(path)
+    assert rows["doc_01"].difficulty == "hard"
 
 
 @pytest.mark.parametrize(
@@ -70,14 +83,17 @@ def test_load_ground_truth_fails_loudly_on_bad_labels(tmp_path, body, match):
 
 def test_load_ground_truth_rejects_missing_columns(tmp_path):
     path = tmp_path / "gt.csv"
-    path.write_text("doc_id,company\na.pdf,Helector\n", encoding="utf-8")
+    path.write_text("doc_id,true_company\na.pdf,Helector\n", encoding="utf-8")
     with pytest.raises(ValueError, match="missing columns"):
         load_ground_truth(path)
 
 
 def test_load_ground_truth_accepts_excel_bom(tmp_path):
     path = tmp_path / "gt.csv"
-    path.write_text("doc_id,company,doc_type,date\na.pdf,Helector,invoice,\n", encoding="utf-8-sig")
+    path.write_text(
+        "doc_id,true_company,true_doc_type,true_date\na.pdf,Helector,invoice,\n",
+        encoding="utf-8-sig",
+    )
     assert "a.pdf" in load_ground_truth(path)
 
 
@@ -131,3 +147,52 @@ def test_evaluate_accuracy_sweep_and_joins():
 def test_evaluate_requires_overlap():
     with pytest.raises(ValueError, match="no overlapping doc_ids"):
         evaluate({"a.pdf": decision()}, {"b.pdf": truth("b.pdf")})
+
+
+def test_evaluate_joins_extensionless_and_case_insensitive_labels():
+    # Labeler writes "Doc_01"; the pipeline's doc_id is "doc_01.pdf".
+    report = evaluate({"doc_01.pdf": decision()}, {"Doc_01": truth("Doc_01")})
+    assert report.n_scored == 1
+    assert report.missing_decisions == []
+    assert report.missing_labels == []
+
+
+def test_evaluate_strips_only_the_pdf_suffix_from_dotted_names():
+    report = evaluate({"v1.2.report.pdf": decision()}, {"v1.2.report": truth("v1.2.report")})
+    assert report.n_scored == 1
+
+
+def test_evaluate_missing_lists_carry_original_ids():
+    report = evaluate(
+        {"a.pdf": decision(), "extra.pdf": decision()},
+        {"a": truth("a"), "unprocessed": truth("unprocessed")},
+    )
+    assert report.missing_decisions == ["unprocessed"]  # as the labeler wrote it
+    assert report.missing_labels == ["extra.pdf"]  # as the pipeline wrote it
+
+
+def test_evaluate_splits_accuracy_by_difficulty_with_counts():
+    decisions = {
+        "a.pdf": decision(),  # right
+        "b.pdf": decision(company="Aktor AI"),  # wrong company
+    }
+    ground_truth = {
+        "a": truth("a", difficulty="clean"),
+        "b": truth("b", difficulty="hard"),
+    }
+    report = evaluate(decisions, ground_truth)
+    assert report.fields["company"].by_difficulty == {"clean": (1, 1), "hard": (0, 1)}
+    rendered = format_report(report)
+    assert "clean 1/1 (100%)" in rendered
+    assert "hard 0/1 (0%)" in rendered
+
+
+@pytest.mark.parametrize(
+    ("decisions_ids", "truth_ids", "source"),
+    [(("a.pdf", "A"), ("b",), "decisions"), (("b.pdf",), ("a", "A.pdf"), "ground truth")],
+)
+def test_evaluate_rejects_join_key_collisions_on_either_side(decisions_ids, truth_ids, source):
+    decisions = {doc_id: decision() for doc_id in decisions_ids}
+    ground_truth = {doc_id: truth(doc_id) for doc_id in truth_ids}
+    with pytest.raises(ValueError, match=f"{source}: .*collide on join key"):
+        evaluate(decisions, ground_truth)

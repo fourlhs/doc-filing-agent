@@ -185,7 +185,7 @@ def test_cli_eval_prints_a_report(dirs, monkeypatch, capsys, tmp_path):
 
     gt = tmp_path / "gt.csv"
     gt.write_text(
-        "doc_id,company,doc_type,date\ngreek_text.pdf,Helector,invoice,2024-03-15\n",
+        "doc_id,true_company,true_doc_type,true_date\ngreek_text.pdf,Helector,invoice,2024-03-15\n",
         encoding="utf-8",
     )
     main.main(

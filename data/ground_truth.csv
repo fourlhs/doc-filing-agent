@@ -1,1 +1,23 @@
-doc_id,company,doc_type,date
+doc_id,true_company,true_doc_type,true_date,difficulty,note
+doc_01,Aktor Construction,contract,2024-03-15,clean,clean: clear letterhead + contract language + date
+doc_02,Helector,invoice,2024-05-02,clean,clean: clear invoice fields + date
+doc_03,Aktor Concessions,court_filing,2024-01-22,clean,clean: clear court filing
+doc_04,Aktor AI,correspondence,2024-06-10,clean,clean: clear correspondence
+doc_05,Aktor Construction,permit,2023-11-08,clean,clean: clear permit
+doc_06,Helector,technical_report,2024-02-19,clean,clean: clear technical report; date is month-year
+doc_07,Aktor Group,financial_statement,2024-04-30,clean,clean: financial statement; two dates (fiscal end + issue) — GT = issue date
+doc_08,Aktor Facility Management,hr_document,2024-07-01,clean,clean: HR employment contract
+doc_09,Aktor Real Estate,invoice,2024-03-28,clean,"clean: invoice, real estate entity"
+doc_10,Aktor Concessions,contract,2023-09-12,clean,clean: concession contract
+doc_11,Aktor Construction,correspondence,2024-05-20,hard,HARD ambiguous company: names TWO entities. GT=issuer (Aktor Construction)
+doc_12,UNKNOWN,correspondence,2024-04-05,hard,HARD UNKNOWN: names only an unlisted foreign subsidiary -> not in company list
+doc_13,Aktor AI,technical_report,,hard,HARD no date: document has NO date anywhere -> GT date empty
+doc_14,UNKNOWN,OTHER,,hard,"HARD junk/OTHER: fragmentary handwritten-style notes, no company, no date, unclassifiable"
+doc_15,Aktor Concessions,court_filing,2024-03-03,hard,"HARD date confusion: multiple dates + case numbers (218/2022, 1157/2021, hearing 14/10/2024). GT = filing date 2024-03-03"
+doc_16,Aktor Real Estate,contract,2024-06-25,clean,clean: lease contract
+doc_17,Helector,correspondence,2024-01-30,clean,clean: correspondence
+doc_18,Aktor Concessions,permit,2023-12-14,clean,clean: environmental permit
+doc_19,Aktor Construction,financial_statement,2024-05-15,clean,clean: financial statement
+doc_20,Aktor AI,hr_document,2024-06-18,clean,clean: HR salary certificate
+doc_21,Aktor Group,financial_statement,2024-02-28,hard,HARD ambiguous type: 'summary of invoices' -> borderline invoice vs financial_statement. GT=financial_statement
+doc_22,UNKNOWN,correspondence,2024-07-02,hard,"HARD UNKNOWN: external law firm letter, no Aktor entity named as owner"

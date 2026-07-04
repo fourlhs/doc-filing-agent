@@ -25,12 +25,14 @@ Outcome = tuple[float, bool]
 
 @dataclass(frozen=True)
 class GroundTruthRow:
-    """One hand-labeled document from data/ground_truth.csv."""
+    """One hand-labeled document from data/ground_truth.csv
+    (columns doc_id,true_company,true_doc_type,true_date[,difficulty,...])."""
 
     doc_id: str
     company: Company
     doc_type: DocType
     date: dt.date | None
+    difficulty: str | None = None  # optional labeler tag, e.g. clean / hard
 
 
 @dataclass(frozen=True)
@@ -51,6 +53,7 @@ class FieldEval:
     auroc: float | None  # None when all answers are right (or all wrong)
     sweep: list[SweepPoint]
     recommended_threshold: float | None  # smallest grid t hitting the target
+    by_difficulty: dict[str, tuple[int, int]] | None  # (correct, total) per difficulty tag
 
 
 @dataclass(frozen=True)
@@ -64,11 +67,16 @@ class EvalReport:
 def load_ground_truth(csv_path: Path) -> dict[str, GroundTruthRow]:
     """Load the hand-labeled CSV, keyed by doc_id. Fails loudly on any label
     that isn't a verbatim enum value or ISO date — a silently mis-scored
-    label is worse than a crash here."""
+    label is worse than a crash here.
+
+    Required columns: doc_id, true_company, true_doc_type, true_date.
+    Optional: difficulty (kept for the report). Other columns are ignored.
+    """
     rows: dict[str, GroundTruthRow] = {}
     with csv_path.open(encoding="utf-8-sig", newline="") as fh:  # BOM-safe: Excel saves may add one
         reader = csv.DictReader(fh)
-        missing = {"doc_id", "company", "doc_type", "date"} - set(reader.fieldnames or [])
+        required = {"doc_id", "true_company", "true_doc_type", "true_date"}
+        missing = required - set(reader.fieldnames or [])
         if missing:
             raise ValueError(f"{csv_path}: missing columns {sorted(missing)}")
         for line, row in enumerate(reader, start=2):
@@ -80,12 +88,13 @@ def load_ground_truth(csv_path: Path) -> dict[str, GroundTruthRow]:
             try:
                 # `or ""`: a short row gives None cells — let the enum raise a
                 # contextful ValueError instead of a bare AttributeError.
-                date_text = (row["date"] or "").strip()
+                date_text = (row["true_date"] or "").strip()
                 rows[doc_id] = GroundTruthRow(
                     doc_id=doc_id,
-                    company=Company((row["company"] or "").strip()),
-                    doc_type=DocType((row["doc_type"] or "").strip()),
+                    company=Company((row["true_company"] or "").strip()),
+                    doc_type=DocType((row["true_doc_type"] or "").strip()),
                     date=dt.date.fromisoformat(date_text) if date_text else None,
+                    difficulty=(row.get("difficulty") or "").strip() or None,
                 )
             except ValueError as exc:
                 raise ValueError(f"{csv_path} line {line} ({doc_id}): {exc}") from None
@@ -114,35 +123,72 @@ def evaluate(
     decisions: dict[str, Decision],
     ground_truth: dict[str, GroundTruthRow],
 ) -> EvalReport:
-    """Compare Decisions to ground truth, joined on doc_id."""
-    scored_ids = sorted(set(decisions) & set(ground_truth))
-    if not scored_ids:
+    """Compare Decisions to ground truth.
+
+    Joined on a normalized doc_id: case-folded (Windows filenames are
+    case-insensitive) with any trailing ".pdf" stripped — the pipeline's
+    doc_id is the filename ("doc_01.pdf") while labelers may write it
+    without the extension ("doc_01"). Only ".pdf" is stripped; dotted
+    names like "v1.2.report" survive intact.
+    """
+    decisions_by_stem = _by_join_key(decisions, "decisions")
+    truth_by_stem = _by_join_key(ground_truth, "ground truth")
+    scored_stems = sorted(set(decisions_by_stem) & set(truth_by_stem))
+    if not scored_stems:
         raise ValueError("no overlapping doc_ids between decisions and ground truth")
 
     fields = {}
     for field in SCORED_FIELDS:
         # For date, None == None counts CORRECT: a confident "no date" about
         # a genuinely dateless document is the right answer, not a miss.
-        outcomes: list[Outcome] = [
-            (
-                getattr(decisions[doc_id].confidence, field),
-                getattr(decisions[doc_id], field) == getattr(ground_truth[doc_id], field),
-            )
-            for doc_id in scored_ids
-        ]
+        outcomes: list[Outcome] = []
+        difficulty_counts: dict[str, list[int]] = {}
+        for stem in scored_stems:
+            decision = decisions_by_stem[stem][1]
+            truth = truth_by_stem[stem][1]
+            ok = getattr(decision, field) == getattr(truth, field)
+            outcomes.append((getattr(decision.confidence, field), ok))
+            if truth.difficulty:
+                correct_total = difficulty_counts.setdefault(truth.difficulty, [0, 0])
+                correct_total[0] += ok
+                correct_total[1] += 1
         sweep = _sweep(outcomes)
         fields[field] = FieldEval(
             accuracy=sum(ok for _, ok in outcomes) / len(outcomes),
             auroc=_auroc(outcomes),
             sweep=sweep,
             recommended_threshold=_recommend(sweep),
+            by_difficulty=(
+                {tag: (c, t) for tag, (c, t) in sorted(difficulty_counts.items())}
+                if difficulty_counts
+                else None
+            ),
         )
     return EvalReport(
-        n_scored=len(scored_ids),
-        missing_decisions=sorted(set(ground_truth) - set(decisions)),
-        missing_labels=sorted(set(decisions) - set(ground_truth)),
+        n_scored=len(scored_stems),
+        missing_decisions=sorted(
+            doc_id for stem, (doc_id, _) in truth_by_stem.items() if stem not in decisions_by_stem
+        ),
+        missing_labels=sorted(
+            doc_id for stem, (doc_id, _) in decisions_by_stem.items() if stem not in truth_by_stem
+        ),
         fields=fields,
     )
+
+
+def _by_join_key(mapping: dict, source: str) -> dict:
+    """Key by the normalized doc_id (case-folded, trailing '.pdf' stripped),
+    preserving the original id; collisions are an error (two labels or
+    decisions would silently score as one)."""
+    keyed: dict[str, tuple[str, object]] = {}
+    for doc_id, value in mapping.items():
+        key = doc_id.lower().removesuffix(".pdf")
+        if key in keyed:
+            raise ValueError(
+                f"{source}: doc_ids {keyed[key][0]!r} and {doc_id!r} collide on join key {key!r}"
+            )
+        keyed[key] = (doc_id, value)
+    return keyed
 
 
 def _auroc(outcomes: list[Outcome]) -> float | None:
@@ -187,7 +233,12 @@ def format_report(report: EvalReport) -> str:
     lines = [f"scored {report.n_scored} documents (target auto-accuracy {TARGET_AUTO_ACCURACY:.0%})"]
     for field, fe in report.fields.items():
         auroc = f"{fe.auroc:.3f}" if fe.auroc is not None else "n/a (no mix of right/wrong)"
-        lines += [f"\n{field}: accuracy {fe.accuracy:.1%}, AUROC {auroc}",
+        difficulty = (
+            " (" + ", ".join(f"{tag} {c}/{t} ({c / t:.0%})" for tag, (c, t) in fe.by_difficulty.items()) + ")"
+            if fe.by_difficulty
+            else ""
+        )
+        lines += [f"\n{field}: accuracy {fe.accuracy:.1%}{difficulty}, AUROC {auroc}",
                   "  threshold  auto-filed  auto-accuracy"]
         for p in fe.sweep:
             selected = f"{p.n_selected}/{report.n_scored} ({p.coverage:.0%})"
