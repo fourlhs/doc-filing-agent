@@ -19,7 +19,14 @@ signatures, and subject matter):
 - "Aktor Facility Management" — building operation and maintenance services
 - "Aktor Real Estate" — property development and management (ακίνητα)
 - "Aktor Group" — the holding company itself (group-level corporate documents)
-- "UNKNOWN" — use this whenever the document does not clearly belong to one entity
+- "UNKNOWN" — use this whenever the document does not clearly belong to one \
+of the entities above. STRICT: if the issuing/owning entity is a subsidiary, \
+affiliate, joint venture, or foreign branch that is not itself on this list, \
+the answer is UNKNOWN — never map an unlisted entity to the closest listed \
+one, and never infer a parent from subject matter (a road-operations \
+subsidiary is not thereby "Aktor Concessions"). A listed entity appearing \
+only as counterparty or recipient does not make it the owner. Mapping an \
+unlisted entity to a listed one is an error, not a low-confidence guess.
 
 Field rules:
 - doc_type: pick the closest category; "OTHER" if none fits.

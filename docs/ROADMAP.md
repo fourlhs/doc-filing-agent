@@ -10,7 +10,7 @@ Approved 2026-07-03. Update checkboxes as steps complete; one git commit per ste
 | Model | claude-sonnet-5 (Haiku comparison via eval later) |
 | Filing | **Copy** (originals stay in `input/`); AUTO mirrors `proposed_folder` under `output/auto/`; REVIEW copied to `output/review/` under original name |
 | Scale | 10–50 docs/run, sequential, per-doc error isolation |
-| Thresholds | Provisional 0.80 all fields; calibrated in step 9 from ~30–50 hand-labeled docs |
+| Thresholds | company **0.90** (calibrated 2026-07-04, baseline n=22); doc_type/date provisional 0.80 until step 9 has more data |
 
 ## Quality workflow — every step, no exceptions
 
@@ -32,7 +32,7 @@ Approved 2026-07-03. Update checkboxes as steps complete; one git commit per ste
 - [x] **7a. Sampling-agreement signal** *(added 2026-07-04; user wanted token logprobs — API exposes none (verified in SDK), chose k-sample agreement instead)* — `classify(samples=k)`: k identical calls, sample 1 is filed, `Decision.agreement` = per-field fraction reproducing it; measurement only (routing reads confidence); eval scores both signals side by side; review CSV + jsonl carry it; `run --samples N`; TOKEN_USAGE telemetry. *Review fixed: `--samples 0` run-killer (guarded at both boundaries); malformed-sample-equals-fallback agreement caveat documented; stale one-LLM-call claims; doc drift in eval/review CLAUDE.md + README.*
 - [ ] **7. Shakedown (live)** — user drops 5–10 real PDFs + API key; run; inspect CSV/tree/summaries/cost; tune prompt only. Done when user says outputs look sane. *(Live smoke 2026-07-04: request shape accepted — no temperature, thinking disabled — doc_01 classified correctly, 2664in/486out tokens/call.)*
 - [x] **8. Eval** — `load_ground_truth` (fail loud on bad labels); decisions from jsonl; per-field accuracy; AUROC (tiny rank-based impl, no sklearn — reviewer fuzz-verified against brute force, 2000 trials, 0 deviation); threshold sweep 0.50–0.95 (counts + coverage + auto-accuracy); recommendation = smallest t hitting target auto-accuracy (0.98 default); `python main.py eval` with friendly errors; hand-computable tests. *Review fixed: CLI tracebacks → SystemExit messages; short-CSV-row AttributeError → contextful ValueError; sweep rows show n/total (small-n honesty); null-date==null-label documented as correct; load_decisions now fail-loud with line context + duplicate check. Note: at n<50 the 0.98 target means zero errors among auto-filed.*
-- [ ] **9. Calibrate** — user labels 30–50 docs; run eval; set data-driven thresholds; optional Haiku comparison; README + this file updated.
+- [ ] **9. Calibrate** — user labels 30–50 docs; run eval; set data-driven thresholds; optional Haiku comparison; README + this file updated. *Partial (2026-07-04): company threshold set to 0.90 from the baseline eval (doc_12's confidently-wrong 0.85 mapping auto-filed at 0.80); prompt hardened — unlisted entities → UNKNOWN, never nearest-listed (live-verified: doc_12 now UNKNOWN@0.95, doc_11/doc_22 unregressed). Also live-verified: Sonnet 5 rejects all non-default temperature values (only 1.0 accepted), so k-sample diversity cannot be raised via temp.*
 
 ## Deliberately deferred
 

@@ -9,9 +9,11 @@ from enum import Enum
 
 from agent.schema import Company, Decision
 
-# TODO(step 9): provisional values — recalibrate from eval/ once ~30-50
-# hand-labeled documents exist (docs/ROADMAP.md).
-THRESHOLDS = {"company": 0.80, "doc_type": 0.80, "date": 0.80}
+# company: calibrated from the 2026-07-04 baseline eval (n=22) — the one
+# wrong-company doc sat at 0.85 and auto-filed; 0.90 catches it at 100%
+# auto-accuracy. doc_type/date: still provisional 0.80 (their eval
+# recommendations rest on zero/one error at n=22 — too thin to act on).
+THRESHOLDS = {"company": 0.90, "doc_type": 0.80, "date": 0.80}
 
 
 class Destination(str, Enum):

@@ -39,7 +39,9 @@ def test_unknown_company_goes_review_even_with_high_confidence():
 def test_single_low_field_goes_review_and_is_named(field):
     result = route(make_decision(confidence={field: 0.42}))
     assert result.destination == Destination.REVIEW
-    assert result.reason == f"{field} confidence 0.42 below threshold 0.80"
+    assert result.reason == (
+        f"{field} confidence 0.42 below threshold {THRESHOLDS[field]:.2f}"
+    )
 
 
 def test_multiple_triggers_all_listed():
@@ -52,9 +54,21 @@ def test_multiple_triggers_all_listed():
 
 
 def test_confidence_exactly_at_threshold_passes():
-    at_threshold = {"company": 0.80, "doc_type": 0.80, "date": 0.80}
-    result = route(make_decision(confidence=at_threshold))
+    result = route(make_decision(confidence=dict(THRESHOLDS)))
     assert result.destination == Destination.AUTO
+
+
+def test_calibrated_threshold_values():
+    # company calibrated by the 2026-07-04 baseline (0.85 miss auto-filed);
+    # doc_type/date deliberately still provisional. Change with data only.
+    assert THRESHOLDS == {"company": 0.90, "doc_type": 0.80, "date": 0.80}
+
+
+def test_company_below_ninety_goes_review():
+    # The exact doc_12 failure shape: wrong company at self-reported 0.85.
+    result = route(make_decision(confidence={"company": 0.85}))
+    assert result.destination == Destination.REVIEW
+    assert "company confidence 0.85 below threshold 0.90" in result.reason
 
 
 def test_parsing_fallback_decision_always_goes_review():

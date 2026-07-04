@@ -3,7 +3,7 @@
 Reports (1) per-field accuracy and (2) how well confidence separates right
 answers from wrong ones — AUROC plus a threshold sweep whose semantics match
 routing exactly (score >= threshold would auto-file). The sweep's recommended
-thresholds are what routing/THRESHOLDS gets set to in step 9.
+thresholds are what routing/THRESHOLDS gets calibrated from.
 """
 
 import csv
